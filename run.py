@@ -25,7 +25,6 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError, conint
 from starlette.background import BackgroundTask
 from starlette.responses import FileResponse
-from huggingsound import SpeechRecognitionModel
 
 from voicevox_engine import __version__
 from voicevox_engine.cancellable_engine import CancellableEngine
@@ -81,7 +80,6 @@ from voicevox_engine.utility import (
     get_save_dir,
 )
 from voicevox_engine.chat_bot import (
-    speech_to_text,
     speech_to_text_api,
     ask_bot_api
 )
@@ -120,7 +118,6 @@ def generate_app(
     synthesis_engines: Dict[str, SynthesisEngineBase],
     latest_core_version: str,
     setting_loader: SettingLoader,
-    stt_model:SpeechRecognitionModel,
     root_dir: Optional[Path] = None,
     cors_policy_mode: CorsPolicyMode = CorsPolicyMode.localapps,
     allow_origin: Optional[List[str]] = None,
@@ -893,10 +890,7 @@ def generate_app(
         with open(file_name, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         try:
-            if (whisper):
-                text = speech_to_text_api(audio_file=file_name)
-            else:
-                text = speech_to_text(stt_model, audio_paths=[file_name])
+            text = speech_to_text_api(audio_file=file_name)
 
             print("==========")
             print(text)
@@ -1377,15 +1371,11 @@ if __name__ == "__main__":
     elif settings.allow_origin is not None:
         allow_origin = settings.allow_origin.split(" ")
 
-    default_model = "jonatasgrosman/wav2vec2-large-xlsr-53-japanese"
-    model = SpeechRecognitionModel(default_model)
-
     uvicorn.run(
         generate_app(
             synthesis_engines,
             latest_core_version,
             setting_loader,
-            model,
             root_dir=root_dir,
             cors_policy_mode=cors_policy_mode,
             allow_origin=allow_origin,
