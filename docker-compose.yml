@@ -4,14 +4,19 @@ services:
   web:
     build:
       context: .
+      target: runtime-env
       args:
         - BASE_IMAGE=ubuntu:20.04
         - BASE_RUNTIME_IMAGE=ubuntu:20.04
         - ONNXRUNTIME_VERSION=1.13.1
         - TARGETPLATFORM=linux/amd64,linux/arm64/v8
         - USE_GPU=false
+        - PYTHON_VERSION=3.8.10
+        # - VOICEVOX_ENGINE_VERSION=0.14.2
+        # - VOICEVOX_CORE_VERSION=0.14.3
+        # - VOICEVOX_RESOURCE_VERSION=latest
     ports:
       - "50021:50021"
     environment:
-      OPENAI_KEY: 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
+      OPENAI_KEY: need_to_add
     
