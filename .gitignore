@@ -7,7 +7,7 @@
 ## Artifact of generating licenses
 /licenses.json
 licenses_venv/
-
+.DS_Store
 # Copied from `https://github.com/github/gitignore/blob/main/Python.gitignore` @2022-01-10
 # Byte-compiled / optimized / DLL files
 __pycache__/

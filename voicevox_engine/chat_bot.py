@@ -1,4 +1,3 @@
-
 from langchain.chat_models import ChatOpenAI
 from langchain import LLMChain
 from langchain import PromptTemplate
@@ -14,18 +13,13 @@ from langchain.schema import (
     SystemMessage
 )
 import openai
-from huggingsound import SpeechRecognitionModel
 
-from transformers import (
-    Wav2Vec2Processor, 
-    AutoModelForCTC
-)
+# from transformers import (
+#     Wav2Vec2Processor, 
+#     AutoModelForCTC
+# )
 import os
 
-def speech_to_text(model, audio_paths):
-    transcriptions = model.transcribe(audio_paths)
-    text = ' .'.join(list(t['transcription'] for t in transcriptions)) 
-    return text
 
 def ask_bot_api(message):
     chat = ChatOpenAI(openai_api_key=os.getenv("OPENAI_KEY"))
