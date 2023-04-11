@@ -18,7 +18,7 @@ from typing import Dict, List, Optional
 
 import soundfile
 import uvicorn
-from fastapi import FastAPI, Form, HTTPException, Query, Request, Response, File, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Query, Request, Response, File, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -121,6 +121,7 @@ def generate_app(
     latest_core_version: str,
     setting_loader: SettingLoader,
     stt_model:SpeechRecognitionModel,
+    cache: dict,
     root_dir: Optional[Path] = None,
     cors_policy_mode: CorsPolicyMode = CorsPolicyMode.localapps,
     allow_origin: Optional[List[str]] = None,
@@ -889,6 +890,11 @@ def generate_app(
         file: file
             File upload
         """
+        last_message = cache['last_message']
+        if last_message and text.lower() == last_message.lower():
+            raise HTTPException(status_code=400, detail="Duplicate message")
+        cache['last_message'] = text
+
         file_name = "Audio.wav"
         with open(file_name, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -963,6 +969,10 @@ def generate_app(
         text: str
             Input text
         """
+        last_message = cache['last_message']
+        if last_message and text.lower() == last_message.lower():
+            raise HTTPException(status_code=400, detail="Duplicate message")
+        cache['last_message'] = text
         print("gpt ==========")
         print(text)
         print(time.time())
@@ -1236,7 +1246,136 @@ def generate_app(
                 "allow_origin": allow_origin,
             },
         )
+    async def send_audio(wav_bytes: bytes, websocket: WebSocket):
+        await websocket.send_bytes(wav_bytes)
+    
+    @app.websocket("/ws_voice_voice")
+    async def ws_voice_voice(websocket: WebSocket,
+                            speaker: int,
+                            whisper: bool,
+                            core_version: Optional[str] = None
+                            ):
+        await websocket.accept()
 
+        while True:
+
+            message = await websocket.receive()
+            encode_string = message["text"]
+            decode_string = base64.b64decode(encode_string)
+
+            with NamedTemporaryFile(mode="w+b", suffix=".wav", delete=False) as _wav:
+                _wav.write(decode_string)
+                file_name = _wav.name
+
+            try:
+                if (whisper):
+                    text = speech_to_text_api(audio_file=file_name)
+                else:
+                    text = speech_to_text(stt_model, audio_paths=[file_name])
+                
+                last_message = cache['last_message']
+                if last_message and text.lower() == last_message.lower():
+                    await websocket.send_json({
+                        "error": "Duplicate message"
+                    })
+                    break
+
+                cache['last_message'] = text.lower()
+                response = ask_bot_api(text)
+                print(response.content)
+                list_reponse = response.content.split(' ')
+                engine = get_engine(core_version)
+
+                for cont in list_reponse:
+                    
+                    accent_phrases = engine.create_accent_phrases(cont, speaker)
+                    audio_query = AudioQuery(
+                        accent_phrases=accent_phrases,
+                        speedScale=1,
+                        pitchScale=0,
+                        intonationScale=1,
+                        volumeScale=1,
+                        prePhonemeLength=0.1,
+                        postPhonemeLength=0.1,
+                        outputSamplingRate=default_sampling_rate,
+                        outputStereo=False,
+                        kana=create_kana(accent_phrases),
+                    )
+
+                    wave = engine.synthesis(
+                        query=audio_query,
+                        speaker_id=speaker,
+                        enable_interrogative_upspeak=True,
+                    )
+
+                    with NamedTemporaryFile(delete=False) as f:
+                        soundfile.write(
+                            file=f, data=wave, samplerate=audio_query.outputSamplingRate, format="WAV"
+                        )
+                    wav_bytes = open(f.name, "rb").read()
+
+                    await send_audio(wav_bytes, websocket)
+                    BackgroundTask(delete_file, f.name)
+            except Exception as e:
+                await websocket.send_json({
+                        "error": "Cant open file"
+                    })
+            finally:
+                os.remove(file_name)
+                
+    @app.websocket("/ws_text_voice")
+    async def ws_text_voice(websocket: WebSocket,
+                            speaker: int,
+                            text: str,
+                            core_version: Optional[str] = None):
+        await websocket.accept()
+
+        while True:
+
+            last_message = cache['last_message']
+            if last_message and text.lower() == last_message.lower():
+                await websocket.send_json({
+                    "error": "Duplicate message"
+                })
+                break
+
+            cache['last_message'] = text.lower()
+            response = ask_bot_api(text)
+            print(response.content)
+            list_reponse = response.content.split(' ')
+
+            engine = get_engine(core_version)
+            for cont in list_reponse:
+                
+                accent_phrases = engine.create_accent_phrases(cont, speaker)
+                audio_query = AudioQuery(
+                    accent_phrases=accent_phrases,
+                    speedScale=1,
+                    pitchScale=0,
+                    intonationScale=1,
+                    volumeScale=1,
+                    prePhonemeLength=0.1,
+                    postPhonemeLength=0.1,
+                    outputSamplingRate=default_sampling_rate,
+                    outputStereo=False,
+                    kana=create_kana(accent_phrases),
+                )
+
+
+                wave = engine.synthesis(
+                    query=audio_query,
+                    speaker_id=speaker,
+                    enable_interrogative_upspeak=True,
+                )
+
+                with NamedTemporaryFile(delete=False) as f:
+                    soundfile.write(
+                        file=f, data=wave, samplerate=audio_query.outputSamplingRate, format="WAV"
+                    )
+                wav_bytes = open(f.name, "rb").read()
+
+                await send_audio(wav_bytes, websocket)
+                BackgroundTask(delete_file, f.name)
     return app
 
 
@@ -1379,13 +1518,16 @@ if __name__ == "__main__":
 
     default_model = "jonatasgrosman/wav2vec2-large-xlsr-53-japanese"
     model = SpeechRecognitionModel(default_model)
-
+    cache = {
+        "last_message": ""
+    }
     uvicorn.run(
         generate_app(
             synthesis_engines,
             latest_core_version,
             setting_loader,
             model,
+            cache,
             root_dir=root_dir,
             cors_policy_mode=cors_policy_mode,
             allow_origin=allow_origin,
