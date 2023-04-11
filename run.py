@@ -890,10 +890,7 @@ def generate_app(
         file: file
             File upload
         """
-        last_message = cache['last_message']
-        if last_message and text.lower() == last_message.lower():
-            raise HTTPException(status_code=400, detail="Duplicate message")
-        cache['last_message'] = text
+        
 
         file_name = "Audio.wav"
         with open(file_name, "wb") as buffer:
@@ -903,7 +900,12 @@ def generate_app(
                 text = speech_to_text_api(audio_file=file_name)
             else:
                 text = speech_to_text(stt_model, audio_paths=[file_name])
-
+            
+            last_message = cache['last_message']
+            if last_message and text.lower() == last_message.lower():
+                raise HTTPException(status_code=400, detail="Duplicate message")
+            cache['last_message'] = text
+            
             print("==========")
             print(text)
 
