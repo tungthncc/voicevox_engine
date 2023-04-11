@@ -6,4 +6,4 @@ services:
     ports:
       - "50021:50021"
     environment:
-      OPENAI_KEY: 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
+      OPENAI_KEY: need-to-add

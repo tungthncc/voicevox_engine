@@ -891,8 +891,8 @@ def generate_app(
             File upload
         """
         
-
-        file_name = "Audio.wav"
+        with NamedTemporaryFile(mode="w+b", suffix=".wav", delete=False) as _wav:
+            file_name = _wav.name
         with open(file_name, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         try:
@@ -905,7 +905,7 @@ def generate_app(
             if last_message and text.lower() == last_message.lower():
                 raise HTTPException(status_code=400, detail="Duplicate message")
             cache['last_message'] = text
-            
+
             print("==========")
             print(text)
 
