@@ -886,7 +886,9 @@ def generate_app(
         file: file
             File upload
         """
-        file_name = "Audio.wav"
+        with NamedTemporaryFile(mode="w+b", suffix=".wav", delete=False) as _wav:
+            file_name = _wav.name
+        #file_name = "Audio.wav"
         with open(file_name, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         try:
